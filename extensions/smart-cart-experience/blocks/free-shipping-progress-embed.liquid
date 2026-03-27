@@ -1,0 +1,89 @@
+{% liquid
+  assign selector_targets = block.settings.selector_targets
+%}
+
+{{ 'free-shipping-progress.css' | asset_url | stylesheet_tag }}
+
+<script
+  src="{{ 'free-shipping-progress.js' | asset_url }}"
+  data-threshold="{{ block.settings.free_shipping_threshold }}"
+  data-shipping-charge="{{ block.settings.shipping_charge_amount }}"
+  data-title="{{ block.settings.widget_title | escape }}"
+  data-progress-text="{{ block.settings.progress_message | escape }}"
+  data-reached-text="{{ block.settings.reached_message | escape }}"
+  data-cart-name="{{ block.settings.cart_name_text | escape }}"
+  data-name-targets="{{ block.settings.name_selector_targets | escape }}"
+  data-targets="{{ selector_targets | escape }}"
+  data-log-url="{{ shop.secure_url }}/apps/sce/cart-access"
+  data-log-enabled="{% if block.settings.enable_cart_access_log %}true{% else %}false{% endif %}"
+  defer
+></script>
+
+{% schema %}
+{
+  "name": "AOV Free Shipping Widget",
+  "target": "body",
+  "settings": [
+    {
+      "type": "number",
+      "id": "free_shipping_threshold",
+      "label": "Free shipping threshold ($)",
+      "default": 200,
+      "info": "Cart subtotal must reach this amount (before tax/shipping) to unlock free shipping messaging."
+    },
+    {
+      "type": "number",
+      "id": "shipping_charge_amount",
+      "label": "Estimated shipping charge",
+      "default": 10
+    },
+    {
+      "type": "text",
+      "id": "widget_title",
+      "label": "Widget title",
+      "default": "Free shipping progress"
+    },
+    {
+      "type": "text",
+      "id": "progress_message",
+      "label": "Progress message",
+      "default": "Add [remaining_amount] more for free shipping on orders [threshold] or more.",
+      "info": "Placeholders: [remaining_amount], [threshold]."
+    },
+    {
+      "type": "text",
+      "id": "reached_message",
+      "label": "Reached message",
+      "default": "You unlocked free shipping!"
+    },
+    {
+      "type": "text",
+      "id": "selector_targets",
+      "label": "Target selectors (progress bar)",
+      "default": ".product__info-container, .cart-drawer__content, .drawer__inner, form[action='/cart'], .cart__blocks",
+      "info": "Avoid parent + child (e.g. .drawer and .drawer__inner) to prevent duplicate bars; app also keeps the deepest match only."
+    },
+    {
+      "type": "text",
+      "id": "cart_name_text",
+      "label": "Cart name text",
+      "default": "d",
+      "info": "Keep empty to hide name badge."
+    },
+    {
+      "type": "text",
+      "id": "name_selector_targets",
+      "label": "Name target selectors",
+      "default": ".cart-drawer__content, .drawer__inner, .drawer__header, form[action='/cart'], .cart__blocks",
+      "info": "Comma-separated selectors for cart drawer and cart page where name should appear."
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_cart_access_log",
+      "label": "Log cart API reads (server + DB)",
+      "default": true,
+      "info": "POSTs anonymized /cart.js snapshot to App Proxy /apps/sce/cart-access. Requires app proxy in shopify.app.toml and app deploy."
+    }
+  ]
+}
+{% endschema %}
