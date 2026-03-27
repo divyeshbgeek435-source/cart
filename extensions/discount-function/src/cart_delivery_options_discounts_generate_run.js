@@ -26,6 +26,7 @@ export function cartDeliveryOptionsDiscountsGenerateRun(input) {
   if (!hasShippingDiscountClass) {
     return {operations: []};
   }
+  const config = parseFunctionConfig(input?.discount?.metafield?.jsonValue);
 
   return {
     operations: [
@@ -33,7 +34,7 @@ export function cartDeliveryOptionsDiscountsGenerateRun(input) {
         deliveryDiscountsAdd: {
           candidates: [
             {
-              message: "FREE DELIVERY",
+              message: config.shipping.message,
               targets: [
                 {
                   deliveryGroup: {
@@ -43,7 +44,7 @@ export function cartDeliveryOptionsDiscountsGenerateRun(input) {
               ],
               value: {
                 percentage: {
-                  value: 100,
+                  value: config.shipping.percentage,
                 },
               },
             },
@@ -53,4 +54,23 @@ export function cartDeliveryOptionsDiscountsGenerateRun(input) {
       },
     ],
   };
+}
+
+function parseFunctionConfig(raw) {
+  const base = {
+    shipping: { percentage: 100, message: 'FREE DELIVERY' },
+  };
+  if (!raw || typeof raw !== 'object') return base;
+  return {
+    shipping: {
+      percentage: normalizePercentage(raw?.shipping?.percentage, base.shipping.percentage),
+      message: String(raw?.shipping?.message || base.shipping.message),
+    },
+  };
+}
+
+function normalizePercentage(value, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0 || n > 100) return fallback;
+  return n;
 }

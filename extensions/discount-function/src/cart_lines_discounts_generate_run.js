@@ -39,13 +39,14 @@ export function cartLinesDiscountsGenerateRun(input) {
   }, input.cart.lines[0]);
 
   const operations = [];
+  const config = parseFunctionConfig(input?.discount?.metafield?.jsonValue);
 
   if (hasOrderDiscountClass) {
     operations.push({
       orderDiscountsAdd: {
         candidates: [
           {
-            message: '10% OFF ORDER',
+            message: config.order.message,
             targets: [
               {
                 orderSubtotal: {
@@ -55,12 +56,12 @@ export function cartLinesDiscountsGenerateRun(input) {
             ],
             value: {
               percentage: {
-                value: 10,
+                value: config.order.percentage,
               },
             },
           },
         ],
-        selectionStrategy: OrderDiscountSelectionStrategy.First,
+        selectionStrategy: mapOrderStrategy(config.order.selectionStrategy),
       },
     });
   }
@@ -70,7 +71,7 @@ export function cartLinesDiscountsGenerateRun(input) {
       productDiscountsAdd: {
         candidates: [
           {
-            message: '20% OFF PRODUCT',
+            message: config.product.message,
             targets: [
               {
                 cartLine: {
@@ -80,12 +81,12 @@ export function cartLinesDiscountsGenerateRun(input) {
             ],
             value: {
               percentage: {
-                value: 20,
+                value: config.product.percentage,
               },
             },
           },
         ],
-        selectionStrategy: ProductDiscountSelectionStrategy.First,
+        selectionStrategy: mapProductStrategy(config.product.selectionStrategy),
       },
     });
   }
@@ -93,4 +94,42 @@ export function cartLinesDiscountsGenerateRun(input) {
   return {
     operations,
   };
+}
+
+function parseFunctionConfig(raw) {
+  const base = {
+    order: { percentage: 10, message: '10% OFF ORDER', selectionStrategy: 'FIRST' },
+    product: { percentage: 20, message: '20% OFF PRODUCT', selectionStrategy: 'FIRST' },
+  };
+  if (!raw || typeof raw !== 'object') return base;
+  return {
+    order: {
+      percentage: normalizePercentage(raw?.order?.percentage, base.order.percentage),
+      message: String(raw?.order?.message || base.order.message),
+      selectionStrategy: String(raw?.order?.selectionStrategy || base.order.selectionStrategy).toUpperCase(),
+    },
+    product: {
+      percentage: normalizePercentage(raw?.product?.percentage, base.product.percentage),
+      message: String(raw?.product?.message || base.product.message),
+      selectionStrategy: String(raw?.product?.selectionStrategy || base.product.selectionStrategy).toUpperCase(),
+    },
+  };
+}
+
+function normalizePercentage(value, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0 || n > 100) return fallback;
+  return n;
+}
+
+function mapOrderStrategy(strategy) {
+  return strategy === 'MAXIMUM'
+    ? OrderDiscountSelectionStrategy.Maximum
+    : OrderDiscountSelectionStrategy.First;
+}
+
+function mapProductStrategy(strategy) {
+  if (strategy === 'ALL') return ProductDiscountSelectionStrategy.All;
+  if (strategy === 'MAXIMUM') return ProductDiscountSelectionStrategy.Maximum;
+  return ProductDiscountSelectionStrategy.First;
 }

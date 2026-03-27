@@ -560,6 +560,7 @@ const LIST_DISCOUNTS = `#graphql
             status
             startsAt
             endsAt
+            asyncUsageCount
             appliesOnOneTimePurchase
             appliesOnSubscription
             discountClasses
@@ -637,16 +638,52 @@ const DELETE_AUTOMATIC = `#graphql
   }
 `;
 
-function makeFunctionConfig({ percentage }) {
+function makeFunctionConfig({
+  orderPercentage,
+  productPercentage,
+  shippingPercentage,
+  orderMessage,
+  productMessage,
+  shippingMessage,
+  orderSelectionStrategy,
+  productSelectionStrategy,
+}) {
   return JSON.stringify({
-    discounts: [
-      {
-        value: { percentage: { value: percentage / 100 } },
-        targets: [{ orderSubtotal: { excludedVariantIds: [] } }],
-      },
-    ],
-    discountApplicationStrategy: "FIRST",
+    order: {
+      percentage: orderPercentage,
+      message: orderMessage,
+      selectionStrategy: orderSelectionStrategy,
+    },
+    product: {
+      percentage: productPercentage,
+      message: productMessage,
+      selectionStrategy: productSelectionStrategy,
+    },
+    shipping: {
+      percentage: shippingPercentage,
+      message: shippingMessage,
+    },
   });
+}
+
+function isoToLocalDateTimeInput(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  const year = d.getFullYear();
+  const month = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hours = pad(d.getHours());
+  const minutes = pad(d.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function localDateTimeInputToIso(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString();
 }
 
 export const loader = async ({ request }) => {
@@ -656,8 +693,14 @@ export const loader = async ({ request }) => {
 
   const response = await admin.graphql(LIST_DISCOUNTS, { variables: { first: 50 } });
   const json = await response.json();
-  const nodes = json?.data?.discountNodes?.nodes || [];
   const appDiscountTypes = json?.data?.appDiscountTypes || [];
+  const appFunctionIds = new Set(appDiscountTypes.map((t) => t?.functionId).filter(Boolean));
+  const allNodes = json?.data?.discountNodes?.nodes || [];
+  const nodes = allNodes.filter((n) => {
+    const d = n?.discount;
+    if (d?.__typename !== "DiscountAutomaticApp") return false;
+    return appFunctionIds.has(d?.appDiscountType?.functionId);
+  });
 
   const found = editId ? nodes.find((n) => n.id === editId) : null;
   const discount = found?.discount;
@@ -727,6 +770,18 @@ export const action = async ({ request }) => {
     ...(discountClassOrder ? ["ORDER"] : []),
     ...(discountClassShipping ? ["SHIPPING"] : []),
   ];
+  const orderPercentage = Number(String(formData.get("orderPercentage") || "10").trim());
+  const productPercentage = Number(String(formData.get("productPercentage") || "20").trim());
+  const shippingPercentage = Number(String(formData.get("shippingPercentage") || "100").trim());
+  const orderMessage = String(formData.get("orderMessage") || "10% OFF ORDER").trim();
+  const productMessage = String(formData.get("productMessage") || "20% OFF PRODUCT").trim();
+  const shippingMessage = String(formData.get("shippingMessage") || "FREE DELIVERY").trim();
+  const orderSelectionStrategy = String(formData.get("orderSelectionStrategy") || "FIRST")
+    .trim()
+    .toUpperCase();
+  const productSelectionStrategy = String(formData.get("productSelectionStrategy") || "FIRST")
+    .trim()
+    .toUpperCase();
   const percentage = Number(String(formData.get("percentage") || "").trim());
   const startsAt = startsAtRaw ? new Date(startsAtRaw) : new Date();
   const endsAt = endsAtRaw ? new Date(endsAtRaw) : null;
@@ -745,6 +800,21 @@ export const action = async ({ request }) => {
   }
   if (mode === "custom" && !discountClasses.length) {
     errors.discountClasses = "Select at least one discount class (Product, Order, or Shipping)";
+  }
+  if (mode === "custom" && (!Number.isFinite(orderPercentage) || orderPercentage < 0 || orderPercentage > 100)) {
+    errors.orderPercentage = "Order percentage must be between 0 and 100";
+  }
+  if (mode === "custom" && (!Number.isFinite(productPercentage) || productPercentage < 0 || productPercentage > 100)) {
+    errors.productPercentage = "Product percentage must be between 0 and 100";
+  }
+  if (mode === "custom" && (!Number.isFinite(shippingPercentage) || shippingPercentage < 0 || shippingPercentage > 100)) {
+    errors.shippingPercentage = "Shipping percentage must be between 0 and 100";
+  }
+  if (mode === "custom" && !["FIRST", "MAXIMUM"].includes(orderSelectionStrategy)) {
+    errors.orderSelectionStrategy = "Order selection strategy must be FIRST or MAXIMUM";
+  }
+  if (mode === "custom" && !["ALL", "FIRST", "MAXIMUM"].includes(productSelectionStrategy)) {
+    errors.productSelectionStrategy = "Product selection strategy must be ALL, FIRST, or MAXIMUM";
   }
   if (startsAtRaw && Number.isNaN(startsAt.getTime())) errors.startsAt = "Invalid start date";
   if (endsAtRaw && (!endsAt || Number.isNaN(endsAt.getTime()))) {
@@ -809,7 +879,16 @@ export const action = async ({ request }) => {
           namespace: "default",
           key: "function-configuration",
           type: "json",
-          value: makeFunctionConfig({ percentage }),
+          value: makeFunctionConfig({
+            orderPercentage,
+            productPercentage,
+            shippingPercentage,
+            orderMessage,
+            productMessage,
+            shippingMessage,
+            orderSelectionStrategy,
+            productSelectionStrategy,
+          }),
         },
       ],
     };
@@ -906,6 +985,14 @@ export default function DiscountsIndex() {
     editDiscount?.discountClasses?.includes("SHIPPING") ?? true,
   );
   const [percentage, setPercentage] = useState(editDiscount?.percentage || "10");
+  const [orderPercentage, setOrderPercentage] = useState("10");
+  const [productPercentage, setProductPercentage] = useState("20");
+  const [shippingPercentage, setShippingPercentage] = useState("100");
+  const [orderMessage, setOrderMessage] = useState("10% OFF ORDER");
+  const [productMessage, setProductMessage] = useState("20% OFF PRODUCT");
+  const [shippingMessage, setShippingMessage] = useState("FREE DELIVERY");
+  const [orderSelectionStrategy, setOrderSelectionStrategy] = useState("FIRST");
+  const [productSelectionStrategy, setProductSelectionStrategy] = useState("FIRST");
 
   useEffect(() => {
     setMode(editDiscount?.mode || "custom");
@@ -921,8 +1008,16 @@ export default function DiscountsIndex() {
     setAppliesOnOneTimePurchase(editDiscount?.appliesOnOneTimePurchase ?? true);
     setAppliesOnSubscription(editDiscount?.appliesOnSubscription ?? false);
     setPercentage(editDiscount?.percentage || "10");
-    setStartsAt(editDiscount?.startsAt || "");
-    setEndsAt(editDiscount?.endsAt || "");
+    setOrderPercentage("10");
+    setProductPercentage("20");
+    setShippingPercentage("100");
+    setOrderMessage("10% OFF ORDER");
+    setProductMessage("20% OFF PRODUCT");
+    setShippingMessage("FREE DELIVERY");
+    setOrderSelectionStrategy("FIRST");
+    setProductSelectionStrategy("FIRST");
+    setStartsAt(isoToLocalDateTimeInput(editDiscount?.startsAt || ""));
+    setEndsAt(isoToLocalDateTimeInput(editDiscount?.endsAt || ""));
   }, [editDiscount]);
 
   const withShopifyParams = (path) => {
@@ -1029,8 +1124,32 @@ export default function DiscountsIndex() {
             </>
           )}
           <s-text-field name="percentage" label="Percentage off" value={percentage} onChange={(e) => setPercentage(e.currentTarget.value)} error={actionData?.errors?.percentage} autocomplete="off"></s-text-field>
-          <s-text-field name="startsAt" label="Starts at (ISO, optional)" value={startsAt} onChange={(e) => setStartsAt(e.currentTarget.value)} error={actionData?.errors?.startsAt} autocomplete="off"></s-text-field>
-          <s-text-field name="endsAt" label="Ends at (ISO, optional)" value={endsAt} onChange={(e) => setEndsAt(e.currentTarget.value)} error={actionData?.errors?.endsAt} autocomplete="off"></s-text-field>
+          <input type="hidden" name="startsAt" value={localDateTimeInputToIso(startsAt)} />
+          <input type="hidden" name="endsAt" value={localDateTimeInputToIso(endsAt)} />
+          <label style={{ display: "block", marginBottom: 8 }}>
+            <div style={{ marginBottom: 4 }}>Starts at (optional)</div>
+            <input
+              type="datetime-local"
+              value={startsAt}
+              onChange={(e) => setStartsAt(e.currentTarget.value)}
+              style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #c9cccf" }}
+            />
+            {actionData?.errors?.startsAt ? (
+              <p style={{ color: "#8a1f17", marginTop: 6 }}>{actionData.errors.startsAt}</p>
+            ) : null}
+          </label>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            <div style={{ marginBottom: 4 }}>Ends at (optional)</div>
+            <input
+              type="datetime-local"
+              value={endsAt}
+              onChange={(e) => setEndsAt(e.currentTarget.value)}
+              style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #c9cccf" }}
+            />
+            {actionData?.errors?.endsAt ? (
+              <p style={{ color: "#8a1f17", marginTop: 6 }}>{actionData.errors.endsAt}</p>
+            ) : null}
+          </label>
           <s-text-field name="segmentId" label="Customer segment ID (optional)" value={segmentId} onChange={(e) => setSegmentId(e.currentTarget.value)} autocomplete="off"></s-text-field>
           <label style={{ display: "block", marginBottom: 6 }}>
             <input type="checkbox" name="combinesWithOrder" checked={combinesWithOrder} onChange={(e) => setCombinesWithOrder(e.currentTarget.checked)} />{" "}
@@ -1063,6 +1182,84 @@ export default function DiscountsIndex() {
                   {actionData.errors.discountClasses}
                 </p>
               ) : null}
+              <s-text-field
+                name="orderPercentage"
+                label="Order discount percentage"
+                value={orderPercentage}
+                onChange={(e) => setOrderPercentage(e.currentTarget.value)}
+                error={actionData?.errors?.orderPercentage}
+                autocomplete="off"
+              ></s-text-field>
+              <s-text-field
+                name="productPercentage"
+                label="Product discount percentage"
+                value={productPercentage}
+                onChange={(e) => setProductPercentage(e.currentTarget.value)}
+                error={actionData?.errors?.productPercentage}
+                autocomplete="off"
+              ></s-text-field>
+              <s-text-field
+                name="shippingPercentage"
+                label="Shipping discount percentage"
+                value={shippingPercentage}
+                onChange={(e) => setShippingPercentage(e.currentTarget.value)}
+                error={actionData?.errors?.shippingPercentage}
+                autocomplete="off"
+              ></s-text-field>
+              <s-text-field
+                name="orderMessage"
+                label="Order discount message"
+                value={orderMessage}
+                onChange={(e) => setOrderMessage(e.currentTarget.value)}
+                autocomplete="off"
+              ></s-text-field>
+              <s-text-field
+                name="productMessage"
+                label="Product discount message"
+                value={productMessage}
+                onChange={(e) => setProductMessage(e.currentTarget.value)}
+                autocomplete="off"
+              ></s-text-field>
+              <s-text-field
+                name="shippingMessage"
+                label="Shipping discount message"
+                value={shippingMessage}
+                onChange={(e) => setShippingMessage(e.currentTarget.value)}
+                autocomplete="off"
+              ></s-text-field>
+              <label style={{ display: "block", marginBottom: 8 }}>
+                <div style={{ marginBottom: 4 }}>Order selection strategy</div>
+                <select
+                  name="orderSelectionStrategy"
+                  value={orderSelectionStrategy}
+                  onChange={(e) => setOrderSelectionStrategy(e.currentTarget.value)}
+                >
+                  <option value="FIRST">FIRST</option>
+                  <option value="MAXIMUM">MAXIMUM</option>
+                </select>
+                {actionData?.errors?.orderSelectionStrategy ? (
+                  <p style={{ color: "#8a1f17", marginTop: 6 }}>
+                    {actionData.errors.orderSelectionStrategy}
+                  </p>
+                ) : null}
+              </label>
+              <label style={{ display: "block", marginBottom: 8 }}>
+                <div style={{ marginBottom: 4 }}>Product selection strategy</div>
+                <select
+                  name="productSelectionStrategy"
+                  value={productSelectionStrategy}
+                  onChange={(e) => setProductSelectionStrategy(e.currentTarget.value)}
+                >
+                  <option value="ALL">ALL</option>
+                  <option value="FIRST">FIRST</option>
+                  <option value="MAXIMUM">MAXIMUM</option>
+                </select>
+                {actionData?.errors?.productSelectionStrategy ? (
+                  <p style={{ color: "#8a1f17", marginTop: 6 }}>
+                    {actionData.errors.productSelectionStrategy}
+                  </p>
+                ) : null}
+              </label>
               <label style={{ display: "block", marginBottom: 6 }}>
                 <input type="checkbox" name="appliesOnOneTimePurchase" checked={appliesOnOneTimePurchase} onChange={(e) => setAppliesOnOneTimePurchase(e.currentTarget.checked)} />{" "}
                 Applies on one-time purchases
@@ -1090,7 +1287,7 @@ export default function DiscountsIndex() {
         </s-section>
       ) : null}
 
-      <s-section heading="All discounts">
+      <s-section heading="My app discounts">
         <s-text-field label="Search" value={filter} onChange={(e) => setFilter(e.currentTarget.value)} autocomplete="off"></s-text-field>
         <s-box padding="base" borderWidth="base" borderRadius="base">
           <div style={{ overflowX: "auto" }}>
@@ -1101,6 +1298,7 @@ export default function DiscountsIndex() {
                   <th style={{ textAlign: "left", padding: "8px" }}>Method</th>
                   <th style={{ textAlign: "left", padding: "8px" }}>Code/Function</th>
                   <th style={{ textAlign: "left", padding: "8px" }}>Status</th>
+                  <th style={{ textAlign: "left", padding: "8px" }}>Used</th>
                   <th style={{ textAlign: "left", padding: "8px" }}>Actions</th>
                 </tr>
               </thead>
@@ -1111,12 +1309,14 @@ export default function DiscountsIndex() {
                   const ref = d.__typename === "DiscountAutomaticApp"
                     ? d?.appDiscountType?.functionId || "—"
                     : d?.codes?.nodes?.[0]?.code || "—";
+                  const used = d?.asyncUsageCount ?? "—";
                   return (
                     <tr key={n.id} style={{ borderTop: "1px solid #e1e3e5" }}>
                       <td style={{ padding: "8px" }}>{d.title || "—"}</td>
                       <td style={{ padding: "8px" }}>{method}</td>
                       <td style={{ padding: "8px" }}>{ref}</td>
                       <td style={{ padding: "8px" }}>{d.status || "—"}</td>
+                      <td style={{ padding: "8px" }}>{used}</td>
                       <td style={{ padding: "8px" }}>
                         <s-stack direction="inline" gap="base">
                           <Form method="get" action={withShopifyParams("")}>
