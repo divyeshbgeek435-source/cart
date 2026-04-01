@@ -1,5 +1,8 @@
 query CartInput {
   cart {
+    sequentialUnlockLevel: attribute(key: "sce_sequential_unlock") {
+      value
+    }
     lines {
       id
       cost {

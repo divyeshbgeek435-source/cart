@@ -12,14 +12,34 @@
   src="{{ 'free-shipping-progress.js' | asset_url }}"
   data-threshold="{{ block.settings.free_shipping_threshold }}"
   data-shipping-charge="{{ block.settings.shipping_charge_amount }}"
+  data-tiers="{{ block.settings.shipping_tiers_json | escape }}"
   data-title="{{ block.settings.widget_title | escape }}"
   data-progress-text="{{ block.settings.progress_message | escape }}"
   data-reached-text="{{ block.settings.reached_message | escape }}"
+  data-charged-text="{{ block.settings.charged_message | escape }}"
   data-cart-name="{{ block.settings.cart_name_text | escape }}"
   data-name-targets=".sce-free-shipping-widget"
   data-targets=".sce-free-shipping-widget"
   data-log-url="{{ shop.secure_url }}/apps/sce/cart-access"
   data-log-enabled="{% if block.settings.enable_cart_access_log %}true{% else %}false{% endif %}"
+  data-sequential-mode="{% if block.settings.sequential_unlock_mode %}true{% else %}false{% endif %}"
+  data-unlock-attribute-key="{{ block.settings.unlock_attribute_key | escape }}"
+  data-sequential-title="{{ block.settings.sequential_widget_title | escape }}"
+  data-tier1-label="{{ block.settings.sequential_tier1_label | escape }}"
+  data-tier2-label="{{ block.settings.sequential_tier2_label | escape }}"
+  data-unlock-tier1-text="{{ block.settings.sequential_unlock_tier1_text | escape }}"
+  data-unlock-tier2-text="{{ block.settings.sequential_unlock_tier2_text | escape }}"
+  data-tier1-done-text="{{ block.settings.sequential_tier1_done_text | escape }}"
+  data-tier2-done-text="{{ block.settings.sequential_tier2_done_text | escape }}"
+  data-tier1-tag-text="{{ block.settings.sequential_tier1_tag_text | escape }}"
+  data-tier2-tag-text="{{ block.settings.sequential_tier2_tag_text | escape }}"
+  data-locked-text="{{ block.settings.sequential_locked_text | escape }}"
+  data-applied-text="{{ block.settings.sequential_applied_text | escape }}"
+  data-sequential-hint-zero="{{ block.settings.sequential_hint_zero | escape }}"
+  data-sequential-hint-mid="{{ block.settings.sequential_hint_mid | escape }}"
+  data-sequential-msg0="{{ block.settings.sequential_msg_0 | escape }}"
+  data-sequential-msg1="{{ block.settings.sequential_msg_1 | escape }}"
+  data-sequential-msg2="{{ block.settings.sequential_msg_2 | escape }}"
   defer
 ></script>
 
@@ -56,7 +76,19 @@
       "type": "text",
       "id": "reached_message",
       "label": "Reached message",
-      "default": "You unlocked free shipping!"
+      "default": "You have free shipping!"
+    },
+    {
+      "type": "text",
+      "id": "charged_message",
+      "label": "Charged tier message",
+      "default": "Shipping charge [shipping_amount] applied"
+    },
+    {
+      "type": "textarea",
+      "id": "shipping_tiers_json",
+      "label": "Shipping tiers (JSON)",
+      "default": "[{\"min\":500,\"max\":999.99,\"shipping\":0,\"message\":\"You have free shipping!\"},{\"min\":1000,\"max\":null,\"shipping\":50,\"message\":\"Shipping charge Rs 50 applied\"}]"
     },
     {
       "type": "text",
@@ -76,6 +108,122 @@
       "id": "enable_cart_access_log",
       "label": "Log cart API reads (server + DB)",
       "default": true
+    },
+    {
+      "type": "header",
+      "content": "2-tier rewards (discount → free shipping)"
+    },
+    {
+      "type": "paragraph",
+      "content": "Tier 1 applies order/product discount; Tier 2 unlocks free shipping. Shoppers tap buttons to set cart attribute sce_sequential_unlock to 1 then 2. In your app discount metafield JSON set sequentialUnlock.enabled to true."
+    },
+    {
+      "type": "checkbox",
+      "id": "sequential_unlock_mode",
+      "label": "Use 2-tier reward UI (progress bar 0% / 50% / 100% + unlock buttons)",
+      "default": false
+    },
+    {
+      "type": "text",
+      "id": "unlock_attribute_key",
+      "label": "Cart attribute key",
+      "default": "sce_sequential_unlock"
+    },
+    {
+      "type": "text",
+      "id": "sequential_widget_title",
+      "label": "Sequential widget title",
+      "default": "Rewards progress"
+    },
+    {
+      "type": "text",
+      "id": "sequential_tier1_label",
+      "label": "Tier 1 milestone label",
+      "default": "Discount"
+    },
+    {
+      "type": "text",
+      "id": "sequential_tier2_label",
+      "label": "Tier 2 milestone label",
+      "default": "Free shipping"
+    },
+    {
+      "type": "text",
+      "id": "sequential_unlock_tier1_text",
+      "label": "Tier 1 button",
+      "default": "Unlock Tier 1"
+    },
+    {
+      "type": "text",
+      "id": "sequential_unlock_tier2_text",
+      "label": "Tier 2 button",
+      "default": "Unlock free shipping"
+    },
+    {
+      "type": "text",
+      "id": "sequential_tier1_done_text",
+      "label": "Tier 1 completed button text",
+      "default": "Tier 1 unlocked"
+    },
+    {
+      "type": "text",
+      "id": "sequential_tier2_done_text",
+      "label": "Tier 2 completed button text",
+      "default": "Tier 2 unlocked"
+    },
+    {
+      "type": "text",
+      "id": "sequential_tier1_tag_text",
+      "label": "Tier 1 tag text",
+      "default": "10% OFF"
+    },
+    {
+      "type": "text",
+      "id": "sequential_tier2_tag_text",
+      "label": "Tier 2 tag text",
+      "default": "Free shipping"
+    },
+    {
+      "type": "text",
+      "id": "sequential_locked_text",
+      "label": "Locked button text",
+      "default": "Locked"
+    },
+    {
+      "type": "text",
+      "id": "sequential_applied_text",
+      "label": "Applied state text",
+      "default": "Applied"
+    },
+    {
+      "type": "text",
+      "id": "sequential_hint_zero",
+      "label": "Hint when no tier completed",
+      "default": "Progress: 0% — unlock Tier 1 to start."
+    },
+    {
+      "type": "text",
+      "id": "sequential_hint_mid",
+      "label": "Hint when Tier 1 done",
+      "default": "Progress: 50% — unlock Tier 2 for free shipping."
+    },
+    {
+      "type": "textarea",
+      "id": "sequential_msg_0",
+      "label": "Status text — no tier complete",
+      "default": "Unlock Tier 1 to apply your cart discount. Then unlock Tier 2 for free shipping."
+    },
+    {
+      "type": "textarea",
+      "id": "sequential_msg_1",
+      "label": "Status text — Tier 1 complete",
+      "default": "Tier 1 complete — your discount is active. Unlock Tier 2 for free shipping."
+    },
+    {
+      "type": "textarea",
+      "id": "sequential_msg_2",
+      "label": "Status text — all tiers complete",
+      "default": "All rewards unlocked — free shipping applies at checkout."
     }
   ]
 }

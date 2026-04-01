@@ -4,7 +4,7 @@
     "target": "cart.lines.discounts.generate.run",
     "input": {
       "cart": {
-        "sequentialUnlockLevel": null,
+        "sequentialUnlockLevel": { "value": "1" },
         "lines": [
           {
             "id": "gid://shopify/CartLine/0",
@@ -19,7 +19,23 @@
       "discount": {
         "discountClasses": ["ORDER"],
         "metafield": {
-          "jsonValue": {}
+          "jsonValue": {
+            "sequentialUnlock": { "enabled": true },
+            "order": {
+              "valueType": "PERCENTAGE",
+              "percentage": 10,
+              "amountOff": 5,
+              "message": "10% OFF ORDER",
+              "selectionStrategy": "FIRST"
+            },
+            "product": {
+              "valueType": "PERCENTAGE",
+              "percentage": 20,
+              "amountOff": 5,
+              "message": "20% OFF PRODUCT",
+              "selectionStrategy": "FIRST"
+            }
+          }
         }
       }
     },

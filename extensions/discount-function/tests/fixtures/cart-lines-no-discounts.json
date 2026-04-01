@@ -4,6 +4,7 @@
     "target": "cart.lines.discounts.generate.run",
     "input": {
       "cart": {
+        "sequentialUnlockLevel": null,
         "lines": [
           {
             "id": "gid://shopify/CartLine/0",
@@ -16,7 +17,10 @@
         ]
       },
       "discount": {
-        "discountClasses": []
+        "discountClasses": [],
+        "metafield": {
+          "jsonValue": {}
+        }
       }
     },
     "output": {

@@ -6,14 +6,24 @@
       "discount": {
         "discountClasses": ["SHIPPING"],
         "metafield": {
-          "jsonValue": {}
+          "jsonValue": {
+            "sequentialUnlock": { "enabled": true },
+            "shipping": {
+              "message": "Unlocked free shipping!",
+              "defaultCharge": 50,
+              "tiers": [
+                { "min": 500, "max": 999.99, "shipping": 0, "message": "You have free shipping!" },
+                { "min": 1000, "max": null, "shipping": 50, "message": "Shipping charge Rs 50 applied" }
+              ]
+            }
+          }
         }
       },
       "cart": {
-        "sequentialUnlockLevel": null,
+        "sequentialUnlockLevel": { "value": "2" },
         "cost": {
           "subtotalAmount": {
-            "amount": "700.0"
+            "amount": "100.0"
           }
         },
         "deliveryGroups": [
@@ -29,7 +39,7 @@
           "deliveryDiscountsAdd": {
             "candidates": [
               {
-                "message": "You have free shipping!",
+                "message": "Unlocked free shipping!",
                 "targets": [
                   {
                     "deliveryGroup": {

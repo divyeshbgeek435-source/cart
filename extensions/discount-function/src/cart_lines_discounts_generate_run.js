@@ -3,6 +3,10 @@ import {
   OrderDiscountSelectionStrategy,
   ProductDiscountSelectionStrategy,
 } from '../generated/api';
+import {
+  parseSequentialUnlockConfig,
+  parseSequentialUnlockLevel,
+} from './sequential_unlock.js';
 
 
 /**
@@ -40,8 +44,30 @@ export function cartLinesDiscountsGenerateRun(input) {
 
   const operations = [];
   const config = parseFunctionConfig(input?.discount?.metafield?.jsonValue);
+  const sequential = parseSequentialUnlockConfig(
+    input?.discount?.metafield?.jsonValue,
+  );
+  if (
+    sequential.enabled &&
+    parseSequentialUnlockLevel(input.cart) < 1
+  ) {
+    return {operations: []};
+  }
 
   if (hasOrderDiscountClass) {
+    const orderValue =
+      config.order.valueType === 'FIXED_AMOUNT'
+        ? {
+            fixedAmount: {
+              amount: config.order.amountOff,
+            },
+          }
+        : {
+            percentage: {
+              value: config.order.percentage,
+            },
+          };
+
     operations.push({
       orderDiscountsAdd: {
         candidates: [
@@ -54,11 +80,7 @@ export function cartLinesDiscountsGenerateRun(input) {
                 },
               },
             ],
-            value: {
-              percentage: {
-                value: config.order.percentage,
-              },
-            },
+            value: orderValue,
           },
         ],
         selectionStrategy: mapOrderStrategy(config.order.selectionStrategy),
@@ -67,6 +89,20 @@ export function cartLinesDiscountsGenerateRun(input) {
   }
 
   if (hasProductDiscountClass) {
+    const productValue =
+      config.product.valueType === 'FIXED_AMOUNT'
+        ? {
+            fixedAmount: {
+              amount: config.product.amountOff,
+              appliesToEachItem: false,
+            },
+          }
+        : {
+            percentage: {
+              value: config.product.percentage,
+            },
+          };
+
     operations.push({
       productDiscountsAdd: {
         candidates: [
@@ -79,11 +115,7 @@ export function cartLinesDiscountsGenerateRun(input) {
                 },
               },
             ],
-            value: {
-              percentage: {
-                value: config.product.percentage,
-              },
-            },
+            value: productValue,
           },
         ],
         selectionStrategy: mapProductStrategy(config.product.selectionStrategy),
@@ -98,17 +130,33 @@ export function cartLinesDiscountsGenerateRun(input) {
 
 function parseFunctionConfig(raw) {
   const base = {
-    order: { percentage: 10, message: '10% OFF ORDER', selectionStrategy: 'FIRST' },
-    product: { percentage: 20, message: '20% OFF PRODUCT', selectionStrategy: 'FIRST' },
+    order: {
+      valueType: 'PERCENTAGE',
+      amountOff: 5,
+      percentage: 10,
+      message: '10% OFF ORDER',
+      selectionStrategy: 'FIRST',
+    },
+    product: {
+      valueType: 'PERCENTAGE',
+      amountOff: 5,
+      percentage: 20,
+      message: '20% OFF PRODUCT',
+      selectionStrategy: 'FIRST',
+    },
   };
   if (!raw || typeof raw !== 'object') return base;
   return {
     order: {
+      valueType: normalizeValueType(raw?.order?.valueType, base.order.valueType),
+      amountOff: normalizeAmountOff(raw?.order?.amountOff, base.order.amountOff),
       percentage: normalizePercentage(raw?.order?.percentage, base.order.percentage),
       message: String(raw?.order?.message || base.order.message),
       selectionStrategy: String(raw?.order?.selectionStrategy || base.order.selectionStrategy).toUpperCase(),
     },
     product: {
+      valueType: normalizeValueType(raw?.product?.valueType, base.product.valueType),
+      amountOff: normalizeAmountOff(raw?.product?.amountOff, base.product.amountOff),
       percentage: normalizePercentage(raw?.product?.percentage, base.product.percentage),
       message: String(raw?.product?.message || base.product.message),
       selectionStrategy: String(raw?.product?.selectionStrategy || base.product.selectionStrategy).toUpperCase(),
@@ -120,6 +168,19 @@ function normalizePercentage(value, fallback) {
   const n = Number(value);
   if (!Number.isFinite(n) || n < 0 || n > 100) return fallback;
   return n;
+}
+
+function normalizeAmountOff(value, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return n;
+}
+
+function normalizeValueType(value, fallback) {
+  const normalized = String(value || '').trim().toUpperCase();
+  if (normalized === 'FIXED_AMOUNT') return 'FIXED_AMOUNT';
+  if (normalized === 'PERCENTAGE') return 'PERCENTAGE';
+  return fallback;
 }
 
 function mapOrderStrategy(strategy) {

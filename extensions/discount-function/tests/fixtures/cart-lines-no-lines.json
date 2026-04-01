@@ -4,10 +4,14 @@
     "target": "cart.lines.discounts.generate.run",
     "input": {
       "cart": {
+        "sequentialUnlockLevel": null,
         "lines": []
       },
       "discount": {
-        "discountClasses": ["ORDER", "PRODUCT"]
+        "discountClasses": ["ORDER", "PRODUCT"],
+        "metafield": {
+          "jsonValue": {}
+        }
       }
     },
     "output": {
